@@ -162,7 +162,7 @@ app.get('/api/mesas-cuentas', async (req, res) => {
   try {
     const [rawMesas, rawVentas, rawDetalles] = await Promise.all([
       appSheetFind("Mesas"),
-      appSheetFind("Ventas", 'Filter(Ventas, [Estado] = "Abierto")'),
+ appSheetFind("Ventas", 'Filter(Ventas, [Estado] <> "Cancelado" AND [Fecha] = TODAY())'),
       appSheetFind("DetalleVentas", 'Filter(DetalleVentas, [Estado] <> "Cancelado")')
     ]);
 
