@@ -1,4 +1,3 @@
-// REEMPLAZA COMPLETAMENTE server.js
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
@@ -11,7 +10,7 @@ const PORT = process.env.PORT || 3000;
 const pool = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER || 'u951308636_comody',
-  password: process.env.DB_PASSWORD || 'Leon2018#',
+  password: process.env.DB_PASSWORD || 'AbCloud2018#',
   database: process.env.DB_NAME || 'u951308636_comody',
   waitForConnections: true,
   connectionLimit: 10,
@@ -65,6 +64,10 @@ async function generarFolio() {
   const ultimo = rows[0].folio;
   const num = parseInt(ultimo.substring(3)) + 1;
   return "VEN" + num.toString().padStart(4, '0');
+}
+
+function calcularTotalVenta(productos) {
+  return productos.reduce((sum, p) => sum + parseFloat(p.subtotal || 0), 0);
 }
 
 // ========== ENDPOINTS ==========
@@ -141,13 +144,11 @@ app.get('/api/mesas-cuentas', async (req, res) => {
     const [mesas] = await pool.query("SELECT * FROM mesas");
     const hoy = new Date().toISOString().slice(0, 10);
     
-    // Traer todas las ventas de hoy
     const [ventas] = await pool.query(
       `SELECT * FROM ventas WHERE DATE(fecha) = ?`,
       [hoy]
     );
     
-    // Traer pagos
     const [pagos] = await pool.query(
       `SELECT folio, SUM(monto) as pagado FROM pagos GROUP BY folio`
     );
@@ -157,7 +158,6 @@ app.get('/api/mesas-cuentas', async (req, res) => {
       pagosPorFolio[p.folio] = parseFloat(p.pagado) || 0;
     });
     
-    // Filtrar solo cuentas abiertas o con saldo pendiente
     const ventasActivas = ventas.filter(v => {
       if (v.estado === 'Cancelado') return false;
       if (v.estado === 'Abierto') return true;
@@ -198,6 +198,9 @@ app.get('/api/mesas-cuentas', async (req, res) => {
     const cuentasAbiertas = [];
 
     ventasActivas.forEach(v => {
+      const productos = detallesPorFolio[v.folio] || [];
+      const totalCalculado = calcularTotalVenta(productos);
+      
       const cuenta = {
         folio: v.folio,
         mesaId: v.mesaid || "",
@@ -205,11 +208,11 @@ app.get('/api/mesas-cuentas', async (req, res) => {
         clienteId: v.clienteid || "",
         tipoServicio: v.tiposervicio || "Local",
         direccion: v.direccionentrega || "",
-        total: parseFloat(v.total) || 0,
+        total: totalCalculado,
         hora: v.hora || "",
         meseroId: v.mesero || "",
         estado: v.estado || "Abierto",
-        productos: detallesPorFolio[v.folio] || []
+        productos
       };
       cuentasAbiertas.push(cuenta);
       if (v.mesaid) ventasPorMesa[v.mesaid] = cuenta;
@@ -237,14 +240,10 @@ app.get('/api/mesas-cuentas', async (req, res) => {
   }
 });
 
-
-
-
 // LOGIN - MYSQL
 app.post('/api/login', async (req, res) => {
   try {
     const { correo, contrasena } = req.body;
-    console.log('LOGIN INTENTO:', correo);
     
     if (!correo || !contrasena) {
       return res.json({ success: false, mensaje: "Ingresa correo y contraseña" });
@@ -255,14 +254,11 @@ app.post('/api/login', async (req, res) => {
       [correo.trim()]
     );
 
-    console.log('USUARIOS ENCONTRADOS:', usuarios.length);
-
     if (usuarios.length === 0) {
       return res.json({ success: false, mensaje: "Usuario no encontrado" });
     }
 
     const usuario = usuarios[0];
-    console.log('USUARIO:', usuario.nombre, 'PASS DB:', usuario.contrasena, 'PASS ENVIADA:', contrasena);
     
     if (usuario.contrasena !== contrasena) {
       return res.json({ success: false, mensaje: "Contraseña incorrecta" });
@@ -341,7 +337,7 @@ app.get('/api/estadisticas-hoy', async (req, res) => {
   try {
     const hoy = new Date().toISOString().slice(0, 10);
     const [ventas] = await pool.query(
-      "SELECT COUNT(*) as cantidad, SUM(CAST(total AS DECIMAL(10,2))) as total FROM ventas WHERE DATE(fecha) = ? AND estado = 'Cerrado'",
+      "SELECT COUNT(*) as cantidad, COALESCE(SUM(CAST(total AS DECIMAL(10,2))), 0) as total FROM ventas WHERE DATE(fecha) = ? AND estado = 'Cerrado'",
       [hoy]
     );
     res.json({ 
@@ -366,8 +362,8 @@ app.post('/api/abrir-cuenta', async (req, res) => {
     const fecha = now.toISOString().slice(0, 19).replace('T', ' ');
     
     await conn.query(
-      `INSERT INTO ventas (folio, fecha, mesaid, mesero, tiposervicio, estado, usuarioatendio) 
-       VALUES (?, ?, ?, ?, 'Local', 'Abierto', ?)`,
+      `INSERT INTO ventas (folio, fecha, mesaid, mesero, tiposervicio, total, estado, usuarioatendio) 
+       VALUES (?, ?, ?, ?, 'Local', 0, 'Abierto', ?)`,
       [folio, fecha, mesaId || null, meseroId || null, usuarioId || null]
     );
     
@@ -413,6 +409,9 @@ app.post('/api/agregar-productos', async (req, res) => {
       );
     }
 
+    const totalCalculado = calcularTotalVenta(productos);
+    await conn.query("UPDATE ventas SET total = ? WHERE folio = ?", [totalCalculado, folio]);
+
     await conn.commit();
     res.json({ success: true, cantidad: productos.length });
   } catch (error) {
@@ -435,8 +434,13 @@ app.post('/api/cerrar-cuenta', async (req, res) => {
     const fecha = now.toISOString().slice(0, 19).replace('T', ' ');
 
     const [ventas] = await conn.query("SELECT * FROM ventas WHERE folio = ?", [folio]);
-    const mesaId = ventas.length > 0 ? ventas[0].mesaid : null;
-    const ventaTotal = ventas.length > 0 ? parseFloat(ventas[0].total || 0) : 0;
+    if (ventas.length === 0) {
+      await conn.rollback();
+      return res.json({ success: false, mensaje: "Venta no encontrada" });
+    }
+
+    const mesaId = ventas[0].mesaid;
+    const ventaTotal = parseFloat(ventas[0].total || 0);
 
     for (let i = 0; i < pagos.length; i++) {
       const pago = pagos[i];
@@ -517,21 +521,21 @@ app.post('/api/registrar-venta', async (req, res) => {
     const now = new Date();
     const fecha = now.toISOString().slice(0, 19).replace('T', ' ');
 
-    let subtotalProductos = data.productos.reduce((sum, p) => sum + p.subtotal, 0);
+    const totalProductos = calcularTotalVenta(data.productos);
     const costoEnvio = data.tipoServicio === "Domicilio" ? (data.costoEnvio || 0) : 0;
     
     let descuento = 0;
     let cuponId = "";
     if (data.cupon && data.cupon.id) {
-      descuento = Math.round(subtotalProductos * (data.cupon.descuento / 100));
+      descuento = Math.round(totalProductos * (data.cupon.descuento / 100));
       cuponId = data.cupon.id;
     }
 
-    const total = subtotalProductos + costoEnvio - descuento;
+    const total = totalProductos + costoEnvio - descuento;
 
     await conn.query(
-      `INSERT INTO ventas (folio, fecha, clienteid, nombrecliente, telefonocliente, direccionentrega, tiposervicio, mesaid, mesero, observaciones, costoenvio, coordenadasentrega, cuponaplicado, descuento, estadodelivery, estado, usuarioatendio) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Cerrado', ?)`,
+      `INSERT INTO ventas (folio, fecha, clienteid, nombrecliente, telefonocliente, direccionentrega, tiposervicio, mesaid, mesero, observaciones, costoenvio, coordenadasentrega, cuponaplicado, descuento, total, estadodelivery, estado, usuarioatendio) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Cerrado', ?)`,
       [
         folio,
         fecha,
@@ -547,6 +551,7 @@ app.post('/api/registrar-venta', async (req, res) => {
         data.coordenadas || "",
         cuponId || null,
         descuento,
+        total,
         data.tipoServicio === "Domicilio" ? "Solicitado" : "",
         data.usuarioId || null
       ]
@@ -758,6 +763,11 @@ app.post('/api/actualizar-detalles', async (req, res) => {
       );
     }
 
+    const folio = cambios[0].folio || (await conn.query("SELECT folio FROM detalleventas WHERE id = ? LIMIT 1", [cambios[0].id]))[0][0].folio;
+    const [detalles] = await conn.query("SELECT subtotal FROM detalleventas WHERE folio = ? AND estado != 'Cancelado'", [folio]);
+    const totalCalculado = detalles.reduce((sum, d) => sum + parseFloat(d.subtotal || 0), 0);
+    await conn.query("UPDATE ventas SET total = ? WHERE folio = ?", [totalCalculado, folio]);
+
     await conn.commit();
     res.json({ success: true, cantidad: cambios.length });
   } catch (error) {
@@ -781,6 +791,13 @@ app.post('/api/cancelar-detalles', async (req, res) => {
     }
 
     await conn.query("UPDATE detalleventas SET estado = 'Cancelado' WHERE id IN (?)", [ids]);
+
+    const [detalles] = await conn.query("SELECT DISTINCT folio FROM detalleventas WHERE id IN (?)", [ids]);
+    for (const d of detalles) {
+      const [activos] = await conn.query("SELECT subtotal FROM detalleventas WHERE folio = ? AND estado != 'Cancelado'", [d.folio]);
+      const totalCalculado = activos.reduce((sum, a) => sum + parseFloat(a.subtotal || 0), 0);
+      await conn.query("UPDATE ventas SET total = ? WHERE folio = ?", [totalCalculado, d.folio]);
+    }
 
     await conn.commit();
     res.json({ success: true });
@@ -820,6 +837,8 @@ app.get('/api/cuenta/:folio', async (req, res) => {
         estado: d.estado || "Activo"
       }));
 
+    const totalCalculado = calcularTotalVenta(productos);
+
     res.json({
       folio: venta.folio,
       mesaId: venta.mesaid || "",
@@ -827,10 +846,11 @@ app.get('/api/cuenta/:folio', async (req, res) => {
       clienteId: venta.clienteid || "",
       tipoServicio: venta.tiposervicio || "Local",
       direccion: venta.direccionentrega || "",
-      total: parseFloat(venta.total) || 0,
+      total: totalCalculado,
       hora: venta.hora || "",
       productos,
-      meseroId: venta.mesero || ""
+      meseroId: venta.mesero || "",
+      estado: venta.estado || "Abierto"
     });
   } catch (error) {
     console.error('ERROR /api/cuenta:', error);
