@@ -130,6 +130,7 @@ app.get('/api/menu', async (req, res) => {
 
     res.json({ categorias: categoriasFormat, productos, extras, productoExtras });
   } catch (error) {
+    console.error('ERROR /api/menu:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -210,6 +211,7 @@ app.get('/api/mesas-cuentas', async (req, res) => {
 
     res.json({ mesas: mesasFormat, cuentas: cuentasAbiertas });
   } catch (error) {
+    console.error('ERROR /api/mesas-cuentas:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -218,6 +220,8 @@ app.get('/api/mesas-cuentas', async (req, res) => {
 app.post('/api/login', async (req, res) => {
   try {
     const { correo, contrasena } = req.body;
+    console.log('LOGIN INTENTO:', correo);
+    
     if (!correo || !contrasena) {
       return res.json({ success: false, mensaje: "Ingresa correo y contraseña" });
     }
@@ -227,14 +231,19 @@ app.post('/api/login', async (req, res) => {
       [correo.trim()]
     );
 
+    console.log('USUARIOS ENCONTRADOS:', usuarios.length);
+
     if (usuarios.length === 0) {
       return res.json({ success: false, mensaje: "Usuario no encontrado" });
     }
 
     const usuario = usuarios[0];
+    console.log('USUARIO:', usuario.nombre, 'PASS DB:', usuario.contrasena, 'PASS ENVIADA:', contrasena);
+    
     if (usuario.contrasena !== contrasena) {
       return res.json({ success: false, mensaje: "Contraseña incorrecta" });
     }
+    
     if (usuario.activo && usuario.activo.toUpperCase() !== "SI") {
       return res.json({ success: false, mensaje: "Usuario inactivo" });
     }
@@ -252,6 +261,7 @@ app.post('/api/login', async (req, res) => {
       }
     });
   } catch (error) {
+    console.error('ERROR LOGIN:', error);
     res.json({ success: false, mensaje: "Error del servidor" });
   }
 });
@@ -266,6 +276,7 @@ app.get('/api/meseros', async (req, res) => {
     })).sort((a, b) => a.nombre.localeCompare(b.nombre));
     res.json(meseros);
   } catch (error) {
+    console.error('ERROR /api/meseros:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -279,6 +290,7 @@ app.get('/api/metodos-pago', async (req, res) => {
       nombre: m.metodo || ""
     })));
   } catch (error) {
+    console.error('ERROR /api/metodos-pago:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -295,6 +307,7 @@ app.get('/api/clientes', async (req, res) => {
       puntos: parseInt(c.puntos) || 0
     })).sort((a, b) => a.nombre.localeCompare(b.nombre)));
   } catch (error) {
+    console.error('ERROR /api/clientes:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -312,6 +325,7 @@ app.get('/api/estadisticas-hoy', async (req, res) => {
       total: parseFloat(ventas[0].total) || 0 
     });
   } catch (error) {
+    console.error('ERROR /api/estadisticas-hoy:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -337,6 +351,7 @@ app.post('/api/abrir-cuenta', async (req, res) => {
     res.json({ success: true, folio });
   } catch (error) {
     await conn.rollback();
+    console.error('ERROR /api/abrir-cuenta:', error);
     res.json({ success: false, mensaje: error.message });
   } finally {
     conn.release();
@@ -378,6 +393,7 @@ app.post('/api/agregar-productos', async (req, res) => {
     res.json({ success: true, cantidad: productos.length });
   } catch (error) {
     await conn.rollback();
+    console.error('ERROR /api/agregar-productos:', error);
     res.json({ success: false, mensaje: error.message });
   } finally {
     conn.release();
@@ -432,6 +448,7 @@ app.post('/api/cerrar-cuenta', async (req, res) => {
     res.json({ success: true, folio });
   } catch (error) {
     await conn.rollback();
+    console.error('ERROR /api/cerrar-cuenta:', error);
     res.json({ success: false, mensaje: error.message });
   } finally {
     conn.release();
@@ -458,6 +475,7 @@ app.post('/api/cancelar-cuenta', async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     await conn.rollback();
+    console.error('ERROR /api/cancelar-cuenta:', error);
     res.json({ success: false, mensaje: error.message });
   } finally {
     conn.release();
@@ -559,6 +577,7 @@ app.post('/api/registrar-venta', async (req, res) => {
     res.json({ success: true, folio, total, descuento });
   } catch (error) {
     await conn.rollback();
+    console.error('ERROR /api/registrar-venta:', error);
     res.json({ success: false, mensaje: error.message });
   } finally {
     conn.release();
@@ -607,6 +626,7 @@ app.post('/api/agregar-cliente', async (req, res) => {
     });
   } catch (error) {
     await conn.rollback();
+    console.error('ERROR /api/agregar-cliente:', error);
     res.json({ success: false, mensaje: error.message });
   } finally {
     conn.release();
@@ -623,6 +643,7 @@ app.get('/api/direcciones/:clienteId', async (req, res) => {
       maps: d.maps || ""
     })));
   } catch (error) {
+    console.error('ERROR /api/direcciones:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -643,6 +664,7 @@ app.post('/api/agregar-direccion', async (req, res) => {
     res.json({ success: true, id: result.insertId });
   } catch (error) {
     await conn.rollback();
+    console.error('ERROR /api/agregar-direccion:', error);
     res.json({ success: false, mensaje: error.message });
   } finally {
     conn.release();
@@ -689,6 +711,7 @@ app.post('/api/validar-cupon', async (req, res) => {
       }
     });
   } catch (error) {
+    console.error('ERROR /api/validar-cupon:', error);
     res.json({ success: false, mensaje: error.message });
   }
 });
@@ -715,6 +738,7 @@ app.post('/api/actualizar-detalles', async (req, res) => {
     res.json({ success: true, cantidad: cambios.length });
   } catch (error) {
     await conn.rollback();
+    console.error('ERROR /api/actualizar-detalles:', error);
     res.json({ success: false, mensaje: error.message });
   } finally {
     conn.release();
@@ -738,6 +762,7 @@ app.post('/api/cancelar-detalles', async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     await conn.rollback();
+    console.error('ERROR /api/cancelar-detalles:', error);
     res.json({ success: false, mensaje: error.message });
   } finally {
     conn.release();
@@ -784,6 +809,7 @@ app.get('/api/cuenta/:folio', async (req, res) => {
       meseroId: venta.mesero || ""
     });
   } catch (error) {
+    console.error('ERROR /api/cuenta:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -804,6 +830,7 @@ app.get('/api/historial', async (req, res) => {
       estado: v.estado || "Cerrado"
     })));
   } catch (error) {
+    console.error('ERROR /api/historial:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -815,6 +842,7 @@ app.post('/api/cerrar-cuenta-sin-cobro', async (req, res) => {
     await pool.query("UPDATE ventas SET estado = 'Cerrado' WHERE folio = ?", [folio]);
     res.json({ success: true });
   } catch (error) {
+    console.error('ERROR /api/cerrar-cuenta-sin-cobro:', error);
     res.json({ success: false, mensaje: error.message });
   }
 });
@@ -837,6 +865,7 @@ app.post('/api/reabrir-cuenta', async (req, res) => {
     
     res.json({ success: true, usuario: usuarios[0].nombre });
   } catch (error) {
+    console.error('ERROR /api/reabrir-cuenta:', error);
     res.json({ success: false, mensaje: error.message });
   }
 });
