@@ -24,7 +24,10 @@ const APPSHEET_APP_ID = "73c158ba-ee52-46ac-bb8a-d5de9288dba7";
 const APPSHEET_API_KEY = "V2-VLqAc-tCJpO-rs1pU-XT4fq-IMOyy-jOlUq-YbEyf-i6rEk";
 const APPSHEET_BASE_URL = `https://api.appsheet.com/api/v2/apps/${APPSHEET_APP_ID}/tables/`;
 
-app.use(cors());
+app.use(cors({
+  origin: ['https://diegoleonuniline.github.io', 'http://localhost:3000', 'http://127.0.0.1:5500'],
+  credentials: true
+}));
 app.use(express.json());
 
 function getHeaders() {
