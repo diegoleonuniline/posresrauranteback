@@ -320,14 +320,16 @@ app.get('/api/estadisticas-hoy', async (req, res) => {
 });
 
 // Abrir cuenta mesa
+// Abrir cuenta mesa
 app.post('/api/abrir-cuenta', async (req, res) => {
   try {
-    const { mesaId, meseroId, usuarioId } = req.body;
+    const { mesaId, meseroId, usuarioId, folio } = req.body;
     const now = new Date();
     const fecha = now.toISOString().split('T')[0];
     const hora = now.toTimeString().split(' ')[0];
 
     const result = await appSheetAdd("Ventas", {
+      Folio: folio,
       Fecha: fecha,
       Hora: hora,
       MesaID: mesaId || "",
