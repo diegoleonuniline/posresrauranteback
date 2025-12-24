@@ -141,7 +141,7 @@ app.get('/api/mesas-cuentas', async (req, res) => {
     const hoy = new Date().toISOString().slice(0, 10);
     
     const [ventas] = await pool.query(
-      `SELECT * FROM ventas WHERE DATE(fecha) = ?`,
+      `SELECT * FROM ventas WHERE DATE(fecha) = ? AND estado != 'Cancelado'`,
       [hoy]
     );
     
@@ -154,16 +154,7 @@ app.get('/api/mesas-cuentas', async (req, res) => {
       pagosPorFolio[p.folio] = parseFloat(p.pagado) || 0;
     });
     
-    const ventasActivas = ventas.filter(v => {
-      if (v.estado === 'Cancelado') return false;
-      if (v.estado === 'Abierto') return true;
-      
-      const total = parseFloat(v.total) || 0;
-      const pagado = pagosPorFolio[v.folio] || 0;
-      return total > pagado;
-    });
-    
-    const folios = ventasActivas.map(v => v.folio);
+    const folios = ventas.map(v => v.folio);
     let detalles = [];
     
     if (folios.length > 0) {
@@ -193,25 +184,34 @@ app.get('/api/mesas-cuentas', async (req, res) => {
     const ventasPorMesa = {};
     const cuentasAbiertas = [];
 
-    ventasActivas.forEach(v => {
+    ventas.forEach(v => {
       const productos = detallesPorFolio[v.folio] || [];
       const totalCalculado = productos.reduce((sum, p) => sum + (parseFloat(p.subtotal) || 0), 0);
+      const pagado = pagosPorFolio[v.folio] || 0;
       
-      const cuenta = {
-        folio: v.folio,
-        mesaId: v.mesaid || "",
-        cliente: v.nombrecliente || "Mostrador",
-        clienteId: v.clienteid || "",
-        tipoServicio: v.tiposervicio || "Local",
-        direccion: v.direccionentrega || "",
-        total: totalCalculado,
-        hora: v.hora || "",
-        meseroId: v.mesero || "",
-        estado: v.estado || "Abierto",
-        productos
-      };
-      cuentasAbiertas.push(cuenta);
-      if (v.mesaid) ventasPorMesa[v.mesaid] = cuenta;
+      // Solo mostrar si: ABIERTA o CERRADA con saldo pendiente
+      if (v.estado === 'Abierto' || (v.estado === 'Cerrado' && totalCalculado > pagado)) {
+        const cuenta = {
+          folio: v.folio,
+          mesaId: v.mesaid || "",
+          cliente: v.nombrecliente || "Mostrador",
+          clienteId: v.clienteid || "",
+          tipoServicio: v.tiposervicio || "Local",
+          direccion: v.direccionentrega || "",
+          total: totalCalculado,
+          hora: v.hora || "",
+          meseroId: v.mesero || "",
+          estado: v.estado || "Abierto",
+          productos
+        };
+        
+        cuentasAbiertas.push(cuenta);
+        
+        // Solo asignar a mesa si está ABIERTA
+        if (v.estado === 'Abierto' && v.mesaid) {
+          ventasPorMesa[v.mesaid] = cuenta;
+        }
+      }
     });
 
     const mesasFormat = mesas.map((m, idx) => {
