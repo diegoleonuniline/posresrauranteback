@@ -196,7 +196,7 @@ app.get('/api/mesas-cuentas', async (req, res) => {
         direccion: v.DireccionEntrega || "",
         total: parseFloat(v.Total) || 0,
         hora: v.Hora || "",
-        meseroId: v.MeseroID || "",
+        meseroId: v.Mesero || "",
         productos: detallesPorFolio[v.Folio] || []
       };
       cuentasAbiertas.push(cuenta);
@@ -298,7 +298,8 @@ app.get('/api/clientes', async (req, res) => {
       id: c.ID,
       nombre: c.Nombre || "",
       telefono: c.Telefono || "",
-      correo: c.Correo || ""
+      correo: c.Correo || "",
+      puntos: parseInt(c.Puntos) || 0
     })).sort((a, b) => a.nombre.localeCompare(b.nombre)));
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -325,11 +326,11 @@ app.post('/api/abrir-cuenta', async (req, res) => {
     const fecha = now.toISOString().split('T')[0];
     const hora = now.toTimeString().split(' ')[0];
 
- const result = await appSheetAdd("Ventas", {
+    const result = await appSheetAdd("Ventas", {
       Fecha: fecha,
       Hora: hora,
       MesaID: mesaId || "",
-      MeseroID: meseroId || "",
+      Mesero: meseroId || "",
       TipoServicio: "Local",
       Estado: "Abierto",
       Total: "0",
@@ -354,13 +355,13 @@ app.post('/api/agregar-productos', async (req, res) => {
       return res.json({ success: false, mensaje: "Sin productos" });
     }
 
-const rows = productos.map(p => ({
+    const rows = productos.map(p => ({
       Folio: folio,
       ProductoID: p.productoId,
       NombreProducto: p.nombre,
       Cantidad: String(p.cantidad),
       PrecioUnitario: String(p.precio),
-      Extras: (p.extrasIds || []).join(","),
+      Extras: p.extrasIds || "",
       ExtrasTotal: String(p.extrasTotal || 0),
       Subtotal: String(p.subtotal),
       Notas: p.notas || "",
@@ -402,27 +403,21 @@ app.post('/api/cerrar-cuenta', async (req, res) => {
 
     const ventas = await appSheetFind("Ventas", `Filter(Ventas, [Folio] = "${folio}")`);
     const mesaId = ventas.length > 0 ? (ventas[0].MesaID || "") : "";
-
-    const mapaMetodos = {
-      "Efectivo": "EFE",
-      "Tarjeta": "TAR",
-      "Transferencia": "TRA",
-      "Vales": "VAL",
-      "Cheque": "CHE"
-    };
+    const ventaTotal = ventas.length > 0 ? (parseFloat(ventas[0].Total) || 0) : 0;
 
     for (let i = 0; i < pagos.length; i++) {
       const pago = pagos[i];
       if (pago.monto > 0) {
-        let metodoPagoId = pago.metodoId;
-        if (metodoPagoId.length > 3 && mapaMetodos[metodoPagoId]) {
-          metodoPagoId = mapaMetodos[metodoPagoId];
+        // Si es efectivo, enviar solo el total, no lo recibido
+        let montoReal = pago.monto;
+        if (pago.metodoId === "EFE" || pago.metodo === "Efectivo") {
+          montoReal = Math.min(pago.monto, ventaTotal);
         }
 
         await appSheetAdd("Pagos", {
           Folio: folio,
-          MetodoPago: metodoPagoId,
-          Monto: String(pago.monto),
+          MetodoPago: pago.metodoId,
+          Monto: String(montoReal),
           Propina: String(i === 0 ? (propina || 0) : 0),
           Fecha: fecha,
           Timestamp: timestamp,
@@ -483,22 +478,24 @@ app.post('/api/registrar-venta', async (req, res) => {
 
     const total = subtotalProductos + costoEnvio - descuento;
 
-     const resultVenta = await appSheetAdd("Ventas", {
+    const resultVenta = await appSheetAdd("Ventas", {
       Fecha: fecha,
       Hora: hora,
       ClienteID: data.clienteId || "",
       NombreCliente: data.nombreCliente || "Mostrador",
       TelefonoCliente: String(data.telefono || ""),
-      DireccionID: data.direccionId || "",
+      DireccionEntrega: data.direccionId || "",
       TipoServicio: data.tipoServicio || "Local",
       MesaID: data.mesaId || "",
+      Mesero: data.meseroId || "",
       Observaciones: data.observaciones || "",
       CostoEnvio: String(costoEnvio),
       CoordenadasEntrega: data.coordenadas || "",
       CuponAplicado: cuponId,
       Descuento: String(descuento),
       EstadoDelivery: data.tipoServicio === "Domicilio" ? "Solicitado" : "",
-      Estado: "Cerrado"
+      Estado: "Cerrado",
+      UsuarioAtendio: data.usuarioId || ""
     });
 
     if (!resultVenta.Rows || resultVenta.Rows.length === 0) {
@@ -508,17 +505,18 @@ app.post('/api/registrar-venta', async (req, res) => {
     const folio = resultVenta.Rows[0].Folio;
 
     // Agregar detalles
-for (const p of data.productos) {
+    for (const p of data.productos) {
       await appSheetAdd("DetalleVentas", {
         Folio: folio,
         ProductoID: p.productoId,
         NombreProducto: p.nombre,
         Cantidad: String(p.cantidad),
         PrecioUnitario: String(p.precio),
-        Extras: (p.extrasIds || []).join(","),
+        Extras: p.extrasIds || "",
         ExtrasTotal: String(p.extrasTotal || 0),
         Subtotal: String(p.subtotal),
-        Notas: p.notas || ""
+        Notas: p.notas || "",
+        "Registrado por": data.usuarioId || ""
       });
     }
 
@@ -527,13 +525,20 @@ for (const p of data.productos) {
       for (let i = 0; i < data.pagos.length; i++) {
         const pago = data.pagos[i];
         if (pago.monto > 0) {
+          // Si es efectivo, enviar solo el total, no lo recibido
+          let montoReal = pago.monto;
+          if (pago.metodoId === "EFE" || pago.metodo === "Efectivo") {
+            montoReal = Math.min(pago.monto, total);
+          }
+
           await appSheetAdd("Pagos", {
-          Folio: folio,
-          MetodoPagoID: metodoPagoId,
-          Monto: String(montoReal),
+            Folio: folio,
+            MetodoPago: pago.metodoId,
+            Monto: String(montoReal),
             Propina: String(i === 0 ? (data.propina || 0) : 0),
             Fecha: fecha,
-            Timestamp: timestamp
+            Timestamp: timestamp,
+            "Registrador por": data.usuarioId || ""
           });
         }
       }
@@ -761,7 +766,7 @@ app.get('/api/cuenta/:folio', async (req, res) => {
       total: parseFloat(venta.Total) || 0,
       hora: venta.Hora || "",
       productos,
-      meseroId: venta.MeseroID || ""
+      meseroId: venta.Mesero || ""
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
