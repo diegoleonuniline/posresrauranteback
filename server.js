@@ -187,18 +187,19 @@ app.get('/api/mesas-cuentas', async (req, res) => {
     const cuentasAbiertas = [];
 
     rawVentas.forEach(v => {
-      const cuenta = {
-        folio: v.Folio,
-        mesaId: v.MesaID || "",
-        cliente: v.NombreCliente || "Mostrador",
-        clienteId: v.ClienteID || "",
-        tipoServicio: v.TipoServicio || "Local",
-        direccion: v.DireccionEntrega || "",
-        total: parseFloat(v.Total) || 0,
-        hora: v.Hora || "",
-        meseroId: v.Mesero || "",
-        productos: detallesPorFolio[v.Folio] || []
-      };
+  const cuenta = {
+    folio: v.Folio,
+    mesaId: v.MesaID || "",
+    cliente: v.NombreCliente || "Mostrador",
+    clienteId: v.ClienteID || "",
+    tipoServicio: v.TipoServicio || "Local",
+    direccion: v.DireccionEntrega || "",
+    total: parseFloat(v.Total) || 0,
+    hora: v.Hora || "",
+    meseroId: v.Mesero || "",
+    estado: v.Estado || "Abierto",
+    productos: detallesPorFolio[v.Folio] || []
+};
       cuentasAbiertas.push(cuenta);
       if (v.MesaID) ventasPorMesa[v.MesaID] = cuenta;
     });
