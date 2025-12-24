@@ -329,6 +329,7 @@ app.get('/api/clientes', async (req, res) => {
 });
 
 // ESTADISTICAS HOY - MYSQL
+// ESTADISTICAS HOY - MYSQL
 app.get('/api/estadisticas-hoy', async (req, res) => {
   try {
     const hoy = new Date().toISOString().slice(0, 10);
