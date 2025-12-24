@@ -141,8 +141,14 @@ app.get('/api/mesas-cuentas', async (req, res) => {
     const [mesas] = await pool.query("SELECT * FROM mesas");
     const hoy = new Date().toISOString().slice(0, 10);
     
+    // Solo traer cuentas abiertas o con saldo pendiente
     const [ventas] = await pool.query(
-      `SELECT * FROM ventas WHERE estado != 'Cancelado' AND DATE(fecha) = ?`,
+      `SELECT v.*, COALESCE(SUM(p.monto), 0) as pagado
+       FROM ventas v
+       LEFT JOIN pagos p ON v.folio = p.folio
+       WHERE v.estado = 'Abierto' AND DATE(v.fecha) = ?
+       GROUP BY v.folio
+       HAVING v.total > pagado OR pagado = 0`,
       [hoy]
     );
     
@@ -185,6 +191,7 @@ app.get('/api/mesas-cuentas', async (req, res) => {
         tipoServicio: v.tiposervicio || "Local",
         direccion: v.direccionentrega || "",
         total: parseFloat(v.total) || 0,
+        pagado: parseFloat(v.pagado) || 0,
         hora: v.hora || "",
         meseroId: v.mesero || "",
         estado: v.estado || "Abierto",
@@ -215,7 +222,6 @@ app.get('/api/mesas-cuentas', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-
 // LOGIN - MYSQL
 app.post('/api/login', async (req, res) => {
   try {
