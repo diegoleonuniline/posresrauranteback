@@ -799,6 +799,37 @@ app.get('/api/historial', async (req, res) => {
   }
 });
 
+// Cerrar cuenta sin cobrar
+app.post('/api/cerrar-cuenta-sin-cobro', async (req, res) => {
+  try {
+    const { folio } = req.body;
+    await appSheetEdit("Ventas", { Folio: folio, Estado: "Cerrado" });
+    res.json({ success: true });
+  } catch (error) {
+    res.json({ success: false, mensaje: error.message });
+  }
+});
+
+// Verificar PIN y reabrir cuenta
+app.post('/api/reabrir-cuenta', async (req, res) => {
+  try {
+    const { folio, pin } = req.body;
+    
+    // Buscar usuario con ese PIN y permiso de reabrir
+    const usuarios = await appSheetFind("Usuarios", `Filter(Usuarios, [PinAcceso] = "${pin}" AND [ReabrirCuenta] = "Si" AND [Activo] = "Si")`);
+    
+    if (usuarios.length === 0) {
+      return res.json({ success: false, mensaje: "PIN inválido o sin permisos" });
+    }
+    
+    // Reabrir la cuenta
+    await appSheetEdit("Ventas", { Folio: folio, Estado: "Abierto" });
+    
+    res.json({ success: true, usuario: usuarios[0].Nombre });
+  } catch (error) {
+    res.json({ success: false, mensaje: error.message });
+  }
+});
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
