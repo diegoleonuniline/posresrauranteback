@@ -141,18 +141,33 @@ app.get('/api/mesas-cuentas', async (req, res) => {
     const [mesas] = await pool.query("SELECT * FROM mesas");
     const hoy = new Date().toISOString().slice(0, 10);
     
-    // Solo traer cuentas abiertas o con saldo pendiente
+    // Traer todas las ventas de hoy
     const [ventas] = await pool.query(
-      `SELECT v.*, COALESCE(SUM(p.monto), 0) as pagado
-       FROM ventas v
-       LEFT JOIN pagos p ON v.folio = p.folio
-       WHERE v.estado = 'Abierto' AND DATE(v.fecha) = ?
-       GROUP BY v.folio
-       HAVING v.total > pagado OR pagado = 0`,
+      `SELECT * FROM ventas WHERE DATE(fecha) = ?`,
       [hoy]
     );
     
-    const folios = ventas.map(v => v.folio);
+    // Traer pagos
+    const [pagos] = await pool.query(
+      `SELECT folio, SUM(monto) as pagado FROM pagos GROUP BY folio`
+    );
+    
+    const pagosPorFolio = {};
+    pagos.forEach(p => {
+      pagosPorFolio[p.folio] = parseFloat(p.pagado) || 0;
+    });
+    
+    // Filtrar solo cuentas abiertas o con saldo pendiente
+    const ventasActivas = ventas.filter(v => {
+      if (v.estado === 'Cancelado') return false;
+      if (v.estado === 'Abierto') return true;
+      
+      const total = parseFloat(v.total) || 0;
+      const pagado = pagosPorFolio[v.folio] || 0;
+      return total > pagado;
+    });
+    
+    const folios = ventasActivas.map(v => v.folio);
     let detalles = [];
     
     if (folios.length > 0) {
@@ -182,7 +197,7 @@ app.get('/api/mesas-cuentas', async (req, res) => {
     const ventasPorMesa = {};
     const cuentasAbiertas = [];
 
-    ventas.forEach(v => {
+    ventasActivas.forEach(v => {
       const cuenta = {
         folio: v.folio,
         mesaId: v.mesaid || "",
@@ -191,7 +206,6 @@ app.get('/api/mesas-cuentas', async (req, res) => {
         tipoServicio: v.tiposervicio || "Local",
         direccion: v.direccionentrega || "",
         total: parseFloat(v.total) || 0,
-        pagado: parseFloat(v.pagado) || 0,
         hora: v.hora || "",
         meseroId: v.mesero || "",
         estado: v.estado || "Abierto",
@@ -222,6 +236,10 @@ app.get('/api/mesas-cuentas', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+
+
+
 // LOGIN - MYSQL
 app.post('/api/login', async (req, res) => {
   try {
