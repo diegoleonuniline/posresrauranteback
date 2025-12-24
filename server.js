@@ -325,11 +325,11 @@ app.post('/api/abrir-cuenta', async (req, res) => {
     const fecha = now.toISOString().split('T')[0];
     const hora = now.toTimeString().split(' ')[0];
 
-    const result = await appSheetAdd("Ventas", {
+ const result = await appSheetAdd("Ventas", {
       Fecha: fecha,
       Hora: hora,
       MesaID: mesaId || "",
-      Mesero: meseroId || "",
+      MeseroID: meseroId || "",
       TipoServicio: "Local",
       Estado: "Abierto",
       Total: "0",
@@ -354,13 +354,13 @@ app.post('/api/agregar-productos', async (req, res) => {
       return res.json({ success: false, mensaje: "Sin productos" });
     }
 
-    const rows = productos.map(p => ({
+const rows = productos.map(p => ({
       Folio: folio,
       ProductoID: p.productoId,
       NombreProducto: p.nombre,
       Cantidad: String(p.cantidad),
       PrecioUnitario: String(p.precio),
-      Extras: p.extras || "",
+      Extras: (p.extrasIds || []).join(","),
       ExtrasTotal: String(p.extrasTotal || 0),
       Subtotal: String(p.subtotal),
       Notas: p.notas || "",
@@ -483,13 +483,13 @@ app.post('/api/registrar-venta', async (req, res) => {
 
     const total = subtotalProductos + costoEnvio - descuento;
 
-    const resultVenta = await appSheetAdd("Ventas", {
+     const resultVenta = await appSheetAdd("Ventas", {
       Fecha: fecha,
       Hora: hora,
       ClienteID: data.clienteId || "",
       NombreCliente: data.nombreCliente || "Mostrador",
       TelefonoCliente: String(data.telefono || ""),
-      DireccionEntrega: data.direccion || "",
+      DireccionID: data.direccionId || "",
       TipoServicio: data.tipoServicio || "Local",
       MesaID: data.mesaId || "",
       Observaciones: data.observaciones || "",
@@ -508,18 +508,14 @@ app.post('/api/registrar-venta', async (req, res) => {
     const folio = resultVenta.Rows[0].Folio;
 
     // Agregar detalles
-    for (const p of data.productos) {
-      const extrasStr = p.extras && p.extras.length > 0 
-        ? p.extras.map(e => e.nombre || e).join(", ") 
-        : "";
-
+for (const p of data.productos) {
       await appSheetAdd("DetalleVentas", {
         Folio: folio,
         ProductoID: p.productoId,
         NombreProducto: p.nombre,
         Cantidad: String(p.cantidad),
         PrecioUnitario: String(p.precio),
-        Extras: extrasStr,
+        Extras: (p.extrasIds || []).join(","),
         ExtrasTotal: String(p.extrasTotal || 0),
         Subtotal: String(p.subtotal),
         Notas: p.notas || ""
@@ -532,9 +528,9 @@ app.post('/api/registrar-venta', async (req, res) => {
         const pago = data.pagos[i];
         if (pago.monto > 0) {
           await appSheetAdd("Pagos", {
-            Folio: folio,
-            MetodoPago: pago.metodoId,
-            Monto: String(pago.monto),
+          Folio: folio,
+          MetodoPagoID: metodoPagoId,
+          Monto: String(montoReal),
             Propina: String(i === 0 ? (data.propina || 0) : 0),
             Fecha: fecha,
             Timestamp: timestamp
