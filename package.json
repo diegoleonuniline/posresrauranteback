@@ -1,3 +1,4 @@
+// REEMPLAZA COMPLETAMENTE package.json
 {
   "name": "posrestauranteback",
   "version": "1.0.0",
@@ -12,6 +13,7 @@
   "dependencies": {
     "express": "^4.18.2",
     "cors": "^2.8.5",
-    "node-fetch": "^2.7.0"
+    "node-fetch": "^2.7.0",
+    "mysql2": "^3.6.5"
   }
 }
