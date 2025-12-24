@@ -817,7 +817,7 @@ app.post('/api/reabrir-cuenta', async (req, res) => {
     const { folio, pin } = req.body;
     
     // Buscar usuario con ese PIN y permiso de reabrir
-    const usuarios = await appSheetFind("Usuarios", `Filter(Usuarios, [PinAcceso] = "${pin}" AND [ReabrirCuenta] = "Si" AND [Activo] = "Si")`);
+   const usuarios = await appSheetFind("Usuarios", `Filter(Usuarios, [Pin de Acceso] = "${pin}" AND [ReabrirCuenta] = "Si" AND [Activo] = "Si")`);
     
     if (usuarios.length === 0) {
       return res.json({ success: false, mensaje: "PIN inválido o sin permisos" });
